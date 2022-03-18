@@ -44,4 +44,10 @@ class PostController extends Controller
 
         return response('ok', 200);
     }
+
+    public function test() {
+        Log::info("Entering test func");
+
+        return response('ok', 200);
+    }
 }
