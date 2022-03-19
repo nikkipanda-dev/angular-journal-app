@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use App\Models\Post;
 use App\Traits\ResponseTrait;
+use Exception;
 
 class PostController extends Controller
 {
@@ -45,9 +46,25 @@ class PostController extends Controller
         return response('ok', 200);
     }
 
-    public function test() {
-        Log::info("Entering test func");
+    public function get() {
+        Log::info("Entering PostController get func...");
 
-        return response('ok', 200);
+        try {
+            $posts = Post::latest()->get();
+
+            if (count($posts) > 0) {
+                Log::info("Successful. Leaving PostController get func...\n");
+
+                return $this->successResponse('posts', $posts);
+            } else {
+                Log::notice("No post.\n");
+
+                return $this->errorResponse("No post.");
+            }
+        } catch (\Exception $e) {
+            Log::error("Failed to retrieve posts. ".$e.".\n");
+
+            return $this->errorResponse("Something went wrong. Please try again in a few seconds.");
+        }
     }
 }
