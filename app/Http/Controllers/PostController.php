@@ -57,7 +57,7 @@ class PostController extends Controller
 
                 return $this->successResponse('posts', $posts);
             } else {
-                Log::notice("No post.\n");
+                Log::notice("No post to show.\n");
 
                 return $this->errorResponse("No post.");
             }
