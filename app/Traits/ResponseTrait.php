@@ -13,8 +13,7 @@ trait ResponseTrait {
         ]);
     }
 
-    public function errorResponse($data)
-    {
+    public function errorResponse($data) {
         return response()->json([
             'isSuccess' => false,
             'errorText' => $data,

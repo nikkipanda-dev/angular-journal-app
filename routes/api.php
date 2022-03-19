@@ -19,4 +19,4 @@ use App\Http\Controllers\PostController;
 Route::post('/register', [AccountController::class, 'register']);
 Route::post('/login', [AccountController::class, 'authenticate']);
 Route::post('/store', [PostController::class, 'store']);
-Route::get('/test', [PostController::class, 'test']);
+Route::get('/get', [PostController::class, 'get']);
