@@ -67,6 +67,28 @@ class PostController extends Controller
         }
     }
 
+    public function paginate(Request $request) {
+        Log::info("Entering PostController paginate func...");
+
+        try {
+            $posts = Post::latest()->offset($request->offset)->limit($request->limit)->get();
+
+            if (count($posts) > 0) {
+                Log::info("Successful. Leaving PostController paginate func...\n");
+
+                return $this->successResponse('posts', $posts);
+            } else {
+                Log::notice("No post to show.\n");
+
+                return $this->errorResponse("No post.");
+            }
+        } catch (\Exception $e) {
+            Log::error("Failed to retrieve posts. " . $e . ".\n");
+
+            return $this->errorResponse("Something went wrong. Please try again in a few seconds.");
+        }
+    }
+
     public function update(Request $request) {
         Log::info("Entering PostController func...\n");
 
