@@ -88,4 +88,38 @@ class AccountController extends Controller
             return $this->errorResponse("Something went wrong. Please again in a few seconds.");
         }
     }
+
+    public function logout(Request $request) {
+        Log::info("Entering AccountController logout func...");
+
+        $this->validate($request, [
+            'id' => 'bail|required|numeric|exists:users',
+        ]);
+
+        try {
+            $user = User::find($request->id);
+
+            if ($user) {
+                Log::info("User ID ".$user->id." exists. Attempting to delete token...");
+
+                if ($user->tokens()->delete()) {
+                    Log::info("Successfully logged out. Leaving AccountController logout func...");
+
+                    return $this->successResponse('user', 'You are now logged out.');
+                } else {
+                    Log::error("Failed to log out. Check database.\n");
+
+                    return $this->errorResponse("Something went wrong.");
+                }
+            } else {
+                Log::error("Failed to log out. User not found.\n");
+
+                return $this->errorResponse("User not found.");
+            }
+        } catch (\Exception $e) {
+            Log::error("Failed to log out. ".$e->getMessage().".\n");
+
+            return $this->errorResponse("Something went wrong.");
+        }
+    }
 }
