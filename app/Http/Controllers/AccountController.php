@@ -31,9 +31,14 @@ class AccountController extends Controller
             $user->save();
 
             if ($user->id) {
-                Log::info("Successfully stored new user ID ".$user->id. ". Leaving AccountController register func...\n");
+                Log::info("Successfully stored new user ID ".$user->id. ". Issuing token and leaving AccountController register func...\n");
 
-                return $this->successResponse('user', $user);
+                $token = $user->createToken('journal_app_secret_user')->plainTextToken;
+
+                return $this->successResponse('user', [
+                    'token' => $token,
+                    'details' => $user,
+                ]);
             } else {
                 Log::error("Failed to store new user ID. Check logs.\n");
             }

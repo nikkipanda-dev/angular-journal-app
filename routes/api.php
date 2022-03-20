@@ -16,7 +16,12 @@ use App\Http\Controllers\PostController;
 |
 */
 
+// account
 Route::post('/register', [AccountController::class, 'register']);
 Route::post('/login', [AccountController::class, 'authenticate']);
+
+// post
 Route::post('/store', [PostController::class, 'store']);
+Route::post('/update', [PostController::class, 'update']);
+Route::post('/destroy', [PostController::class, 'destroy']);
 Route::get('/get', [PostController::class, 'get']);
