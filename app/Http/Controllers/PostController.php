@@ -254,4 +254,42 @@ class PostController extends Controller
             return $this->errorResponse("Something went wrong.");
         }
     }
+
+    public function getRandomPost(Request $request) {
+        Log::info("Entering PostController getRandomPost func...");
+
+        $this->validate($request, [
+            'user_id' => 'bail|required|numeric|exists:users,id',
+        ]);
+
+        try {
+            $user = User::find(4);
+
+            if ($user) {
+                Log::info("User ID ".$user->id." exists. Attempting to retrieve posts...");
+
+                $posts = Post::latest()->where('user_id', $user->id)->get();
+
+                if (count($posts) > 0) {
+                    Log::info("User has posts. Leaving PostController getRandomPost func...");
+
+                    $random = Post::where('user_id', $user->id)->inRandomOrder()->first();
+
+                    return $this->successResponse('post', $random);
+                } else {
+                    Log::notice("No post at the moment.\n");
+
+                    return $this->errorResponse("No post at the moment.");
+                }
+            } else {
+                Log::error("User not found.\n");
+
+                return $this->errorResponse("Something went wrong.");
+            }
+        } catch (\Exception $e) {
+            Log::error("Failed to get random post. ".$e->getMessage().".\n");
+
+            return $this->errorResponse("Something went wrong.");
+        }
+    }
 }

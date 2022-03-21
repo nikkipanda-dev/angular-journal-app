@@ -27,3 +27,4 @@ Route::post('/update', [PostController::class, 'update']);
 Route::post('/destroy', [PostController::class, 'destroy']);
 Route::get('/get', [PostController::class, 'get']);
 Route::get('/paginate', [PostController::class, 'paginate']);
+Route::get('/get/random', [PostController::class, 'getRandomPost']);
