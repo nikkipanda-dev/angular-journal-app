@@ -263,7 +263,7 @@ class PostController extends Controller
         ]);
 
         try {
-            $user = User::find(4);
+            $user = User::find($request->user_id);
 
             if ($user) {
                 Log::info("User ID ".$user->id." exists. Attempting to retrieve posts...");
