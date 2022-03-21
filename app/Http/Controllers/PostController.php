@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use App\Models\Post;
+use App\Models\User;
 use App\Traits\ResponseTrait;
 use Illuminate\Support\Facades\DB;
 use Exception;
@@ -17,26 +18,37 @@ class PostController extends Controller
         Log::info("Entering PostController store func...");
 
         $this->validate($request, [
+            'user_id' => 'bail|required|numeric|exists:users,id',
             'title' => 'bail|required|string|min:5',
             'body' => 'bail|required|string|min:5',
         ]);
 
         try {   
+            $user = User::find($request->user_id);
             $post = new Post();
 
-            $post->title = $request->title;
-            $post->body = $request->body;
+            if ($user) {
+                Log::info("User ID ".$user->id." exists. Attempting to store record...");
+                
+                $post->user_id = $request->user_id;
+                $post->title = $request->title;
+                $post->body = $request->body;
 
-            $post->save();
+                $post->save();
 
-            if ($post->id) {
-                Log::info("Successfully stored new post ID ".$post->id. ". Leaving PostController store func...\n");
+                if ($post->id) {
+                    Log::info("Successfully stored new post ID " . $post->id . ". Leaving PostController store func...\n");
 
-                return $this->successResponse('post', $post);
+                    return $this->successResponse('post', $post);
+                } else {
+                    Log::error("Failed to store new post.\n");
+
+                    return $this->errorResponse('Something went wrong. Please try again in a few seconds.');
+                }
             } else {
-                Log::error("Failed to store new post.\n");
+                Log::error("Failed to store new post. User not found.\n");
 
-                return $this->errorResponse('Something went wrong. Please try again in a few seconds.');
+                return $this->errorResponse("Something went wrong.");
             }
         } catch (\Exception $e) {
             Log::error("Failed to store new post. ".$e."\n");
@@ -45,20 +57,33 @@ class PostController extends Controller
         }
     }
 
-    public function get() {
+    public function get(Request $request) {
         Log::info("Entering PostController get func...");
 
+        $this->validate($request, [
+            'user_id' => 'bail|required|numeric|exists:users,id',
+        ]);
+
         try {
-            $posts = Post::latest()->get();
+            $user = User::find($request->user_id);
+            $posts = Post::latest()->where('user_id', $request->user_id)->get();
 
-            if (count($posts) > 0) {
-                Log::info("Successful. Leaving PostController get func...\n");
+            if ($user) {
+                Log::info("User ID ".$user->id." exists. Checking if user has posts...");
 
-                return $this->successResponse('posts', $posts);
+                if (count($posts) > 0) {
+                    Log::info("Successful. Leaving PostController get func...\n");
+
+                    return $this->successResponse('posts', $posts);
+                } else {
+                    Log::notice("No post to show.\n");
+
+                    return $this->errorResponse("No post.");
+                }
             } else {
-                Log::notice("No post to show.\n");
+                Log::error("Failed to store new post. User not found.\n");
 
-                return $this->errorResponse("No post.");
+                return $this->errorResponse("Something went wrong.");
             }
         } catch (\Exception $e) {
             Log::error("Failed to retrieve posts. ".$e.".\n");
@@ -70,17 +95,30 @@ class PostController extends Controller
     public function paginate(Request $request) {
         Log::info("Entering PostController paginate func...");
 
+        $this->validate($request, [
+            'user_id' => 'bail|required|numeric|exists:users,id',
+        ]);
+
         try {
-            $posts = Post::latest()->offset($request->offset)->limit($request->limit)->get();
+            $user = User::find($request->user_id);
+            $posts = Post::latest()->offset($request->offset)->limit($request->limit)->where('user_id', $request->user_id)->get();
 
-            if (count($posts) > 0) {
-                Log::info("Successful. Leaving PostController paginate func...\n");
+            if ($user) {
+                Log::info("User ID ".$user->id." exists. Attempting to retrieve posts..." );
 
-                return $this->successResponse('posts', $posts);
+                if (count($posts) > 0) {
+                    Log::info("Successful. Leaving PostController paginate func...\n");
+
+                    return $this->successResponse('posts', $posts);
+                } else {
+                    Log::notice("No post to show.\n");
+
+                    return $this->errorResponse("No post.");
+                }
             } else {
-                Log::notice("No post to show.\n");
+                Log::error("Failed to store new post. User not found.\n");
 
-                return $this->errorResponse("No post.");
+                return $this->errorResponse("Something went wrong.");
             }
         } catch (\Exception $e) {
             Log::error("Failed to retrieve posts. " . $e . ".\n");
@@ -93,7 +131,8 @@ class PostController extends Controller
         Log::info("Entering PostController func...\n");
 
         $this->validate($request, [
-            'id' => 'bail|required|numeric|exists:posts',
+            'user_id' => 'bail|required|numeric|exists:users,id',
+            'post_id' => 'bail|required|numeric|exists:posts,id',
             'title' => 'bail|required|string|min:5',
             'body' => 'bail|required|string|min:5',
         ]);
@@ -101,41 +140,58 @@ class PostController extends Controller
         try {
             $isValid = false;
             $errorText = null;
-            $post = Post::find($request->id);
+            $user = User::find($request->user_id);
+            $post = Post::find($request->post_id);
 
-            if ($post) {
-                Log::info("Post ID ".$post->id." exists. Attempting to update...");
+            if ($user) {
+                Log::info("User ID ".$user->id." exists. Attempting to retrieve record...");
 
-                $postResponse = DB::transaction(function () use($post, $request, $isValid, $errorText) {
-                    $post->title = $request->title;
-                    $post->body = $request->body;
+                if ($post) {
+                    Log::info("Post ID " . $post->id . " exists. Checking if user ID matches request...");
 
-                    $post->save();
+                    if (intval($post->user_id) === intval($user->id)) {
+                        Log::info("Verified. Attempting to soft delete...");
 
-                    if ($post->wasChanged()) {
-                        $isValid = true;
+                        $postResponse = DB::transaction(function () use ($post, $request, $isValid, $errorText) {
+                            $post->title = $request->title;
+                            $post->body = $request->body;
+
+                            $post->save();
+
+                            if ($post->wasChanged()) {
+                                $isValid = true;
+                            } else {
+                                Log::notice("Post details were not changed.\n");
+                            }
+
+                            return [
+                                'isValid' => $isValid,
+                                'errorText' => $errorText,
+                                'post' => $post,
+                            ];
+                        }, 3);
+
+                        if ($postResponse['isValid']) {
+                            Log::info("Successfully updated post ID " . $post->id . ". Leaving PostController func...\n");
+
+                            return $this->successResponse('post', $postResponse['post']);
+                        } else {
+                            return $this->errorResponse($postResponse['errorText']);
+                        }
                     } else {
-                        Log::notice("Post details were not changed.\n");
+                        Log::error("User ID and post user_id mismatch.\n");
+
+                        return $this->errorResponse("Unauthorized action.");
                     }
-
-                    return [
-                        'isValid' => $isValid,
-                        'errorText' => $errorText,
-                        'post' => $post,
-                    ];
-                }, 3);
-
-                if ($postResponse['isValid']) {
-                    Log::info("Successfully updated post ID ".$post->id.". Leaving PostController func...\n");
-
-                    return $this->successResponse('post', $postResponse['post']);
                 } else {
-                    return $this->errorResponse($postResponse['errorText']);
+                    Log::error("Failed to retrieve post. Post not found.\n");
+
+                    return $this->errorResponse("Post not found.");
                 }
             } else {
-                Log::error("Failed to retrieve post. Post not found.\n");
+                Log::error("Failed to update post. User not found.\n");
 
-                return $this->errorResponse("Post not found.");
+                return $this->errorResponse("Something went wrong.");
             }
         } catch (\Exception $e) {
             Log::error("Failed to update post. ".$e->getMessage().".\n");
@@ -148,31 +204,49 @@ class PostController extends Controller
         Log::info("Entering PostController destroy func...");
 
         $this->validate($request, [
-            'id' => 'bail|required|numeric|exists:posts',
+            'user_id' => 'bail|required|numeric|exists:users,id',
+            'post_id' => 'bail|required|numeric|exists:posts,id',
         ]);
 
         try {
-            $post = Post::find($request->id);
+            $user = User::find($request->user_id);
+            $post = Post::find($request->post_id);
 
-            if ($post) {
-                Log::info("Post ID ".$post->id." exists. Attempting to soft delete...");
-                $postId = $post->getOriginal('id');
+            if ($user) {
+                Log::info("User ID ".$user->id." exists. Attempting to retrieve record...");
 
-                $post->delete();
+                if ($post) {
+                    Log::info("Post ID " . $post->id . " exists. Checking if user id matches request...");
+                    $postId = $post->getOriginal('id');
 
-                if ($post->trashed()) {
-                    Log::info("Successfully soft deleted post ID ".$postId.". Leaving PostController destroy func...");
+                    if (intval($post->user_id) == intval($user->id)) {
+                        Log::info("Verified. Attempting to soft delete...");
 
-                    return $this->successResponse('post', 'Post deleted.');
+                        $post->delete();
+
+                        if ($post->trashed()) {
+                            Log::info("Successfully soft deleted post ID " . $postId . ". Leaving PostController destroy func...");
+
+                            return $this->successResponse('post', 'Post deleted.');
+                        } else {
+                            Log::error("Failed to soft delete post. Check logs.\n");
+
+                            return $this->errorResponse("Something went wrong.");
+                        }
+                    } else {
+                        Log::error("User ID and post user_id mismatch.\n");
+
+                        return $this->errorResponse("Unauthorized action.");
+                    }
                 } else {
-                    Log::error("Failed to soft delete post. Check logs.\n");
+                    Log::error("Failed to soft delete post. Post not found.\n");
 
-                    return $this->errorResponse("Something went wrong.");
+                    return $this->errorResponse("Post not found.");
                 }
             } else {
-                Log::error("Failed to soft delete post. Post not found.\n");
+                Log::error("Failed to soft delete post. User not found.\n");
 
-                return $this->errorResponse("Post not found.");
+                return $this->errorResponse("Something went wrong.");
             }
         } catch (\Exception $e) {
             Log::error("Failed to soft delete post. ".$e->getMessage().".\n");
