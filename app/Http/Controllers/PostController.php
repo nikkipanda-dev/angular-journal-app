@@ -6,8 +6,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use App\Models\Post;
 use App\Models\User;
+use App\Models\Image;
 use App\Traits\ResponseTrait;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Exception;
 
 class PostController extends Controller
@@ -21,29 +23,111 @@ class PostController extends Controller
             'user_id' => 'bail|required|numeric|exists:users,id',
             'title' => 'bail|required|string|min:5',
             'body' => 'bail|required|string|min:5',
+            'image' => 'bail|nullable|image',
         ]);
 
         try {   
             $user = User::find($request->user_id);
             $post = new Post();
+            $image = new Image();
+            $isValid = false;
+            $errorText = null;
 
             if ($user) {
                 Log::info("User ID ".$user->id." exists. Attempting to store record...");
-                
-                $post->user_id = $request->user_id;
-                $post->title = $request->title;
-                $post->body = $request->body;
 
-                $post->save();
+                $postResponse = DB::transaction(function() use($request, $post, $image, $user, $isValid, $errorText) {
+                    $post->user_id = $request->user_id;
+                    $post->title = $request->title;
+                    $post->body = $request->body;
 
-                if ($post->id) {
-                    Log::info("Successfully stored new post ID " . $post->id . ". Leaving PostController store func...\n");
+                    $post->save();
 
-                    return $this->successResponse('post', $post);
+                    if ($request->hasFile('image')) {
+                        Log::info("Image has file. Checking if valid...");
+
+                        if ($request->image->isValid()) {
+                            Log::info("Image is valid. Checking if filename is unique...");
+
+                            $randNum = '';
+
+                            for ($i = 0; $i < 10; $i++) {
+                                $randNum .= mt_rand(0, 9);
+                            }
+
+                            $filename = $user->id . '-' . $post->id . '-' . $randNum.'.'. $request->image->extension();
+
+                            if (Storage::disk('public')->missing('posts/' . $filename)) {
+                                Storage::putFileAs(
+                                    'public/posts',
+                                    $request->image,
+                                    $filename
+                                );
+
+                                // Check if image was saved to storage
+                                if (Storage::disk('public')->exists('posts/' . $filename)) {
+                                    $image->post_id = $post->id;
+                                    $image->path = 'storage/posts/' . $filename;
+
+                                    $image->save();
+
+                                    if ($image->id) {
+                                        Log::info("Image path successfully saved with ID " . $image->id . ".");
+                                    } else {
+                                        Log::error("Failed to store image path to database. Check logs.");
+
+                                        $errorText = "Failed to image path to database. Please try again in a few minutes or contact us for assistance.";
+
+                                        throw new Exception("Failed to store image path to database.\n");
+                                    }
+                                } else {
+                                    Log::error("Generated filename is unique but failed to store image to storage. Check logs.");
+
+                                    $errorText = "Failed to create post. Something went wrong. Please try again in a few seconds.";
+
+                                    throw new Exception("Generated filename is unique but failed to store image to storage.\n");
+                                }
+                            } else {
+                                Log::notice('Filename for image already exists in the storage folder /posts.');
+
+                                $errorText = "Failed to create post. Please try again in a few minutes or contact us for assistance.";
+
+                                throw new Exception("Failed to store image to storage. Filename for image already exists in the storage folder /posts.\n");
+                            }
+                        } else {
+                            Log::error("Failed to store post. Image is invalid.\n");
+
+                            $errorText = "Failed to create post. Image is invalid.";
+
+                            throw new Exception($errorText);
+                        }
+                    } else {
+                        Log::notice("No uploaded file. Skipping...");
+                    }
+
+                    if ($post->id) {
+                        $isValid = true;
+                    } else {
+                        Log::error("Failed to store new post.\n");
+
+                        $errorText = "Something went wrong. Please try again in a few seconds.";
+                    }
+
+                    return [
+                        'isValid' => $isValid,
+                        'errorText' => $errorText,
+                        'post' => $post,
+                    ];
+                }, 3);
+
+                if ($postResponse['isValid']) {
+                    Log::info("Successfully stored new post ID " . $postResponse['post']['id']. ". Leaving PostController store func...\n");
+
+                    return $this->successResponse('post', $postResponse['post']);
                 } else {
-                    Log::error("Failed to store new post.\n");
+                    Log::error("Failed to store post.\n");
 
-                    return $this->errorResponse('Something went wrong. Please try again in a few seconds.');
+                    return $this->errorResponse($postResponse['errorText']);
                 }
             } else {
                 Log::error("Failed to store new post. User not found.\n");
@@ -66,7 +150,7 @@ class PostController extends Controller
 
         try {
             $user = User::find($request->user_id);
-            $posts = Post::latest()->where('user_id', $request->user_id)->get();
+            $posts = Post::latest()->with('images')->where('user_id', $request->user_id)->get();
 
             if ($user) {
                 Log::info("User ID ".$user->id." exists. Checking if user has posts...");
@@ -101,7 +185,7 @@ class PostController extends Controller
 
         try {
             $user = User::find($request->user_id);
-            $posts = Post::latest()->offset($request->offset)->limit($request->limit)->where('user_id', $request->user_id)->get();
+            $posts = Post::latest()->with('images')->offset($request->offset)->limit($request->limit)->where('user_id', $request->user_id)->get();
 
             if ($user) {
                 Log::info("User ID ".$user->id." exists. Attempting to retrieve posts..." );

@@ -6,7 +6,9 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 use App\Traits\ResponseTrait;
+use Exception;
 
 class AccountController extends Controller
 {
@@ -86,6 +88,70 @@ class AccountController extends Controller
             Log::error("Failed to authenticate user. ".$e."\n");
 
             return $this->errorResponse("Something went wrong. Please again in a few seconds.");
+        }
+    }
+
+    public function updatePassword(Request $request) {
+        Log::info("Entering AccountController register func...");
+
+        $this->validate($request, [
+            'id' => 'bail|required|numeric|exists:users',
+            'current_password' => 'bail|required',
+            'password' => 'bail|required|string|min:8|max:16|confirmed',
+            'password_confirmation' => 'required'
+        ]);
+
+        try {
+            $isValid = false;
+            $errorText = null;
+            $user = User::find($request->id);
+
+            if ($user) {
+                Log::info("User ID ".$user->id." exists. Checking if current password matches...");
+
+                if (Hash::check($request->password, $user->password)) {
+                    Log::info("Verified. Attempting to update password...");
+
+                    $passwordResponse = DB::transaction(function() use($request, $user, $isValid, $errorText) {
+                        $user->password = Hash::make($request->password);
+
+                        $user->save();
+
+                        if ($user->wasChanged('password')) {
+                            $isValid = true;
+                        } else {
+                            Log::error("Same is the same as current.");
+
+                            throw new Exception("Please choose another password other than your current.");
+                        }
+
+                        return [
+                            'isValid' => $isValid,
+                            'errorText' => $errorText
+                        ];
+                    }, 3);
+
+                    if ($passwordResponse['isValid']) {
+                        Log::info("Successfully updated password of user ID ".$user->id.". Leaving AccountController updatePassword func...");
+
+                        return $this->successResponse(null, null);
+                    } else {
+                        return $this->errorResponse($passwordResponse['errorText']); 
+                    }
+                } else {
+                    Log::error("Failed to update password. Password does not match.\n");
+
+                    return $this->errorResponse("Current password is incorrect. Please try again.");                    
+                }
+            } else {
+                Log::error("Failed to update password.\n");
+
+                return $this->errorResponse("Failed to update password. User not found.");
+            }
+        } catch (\Exception $e) {
+            Log::error("Failed to store new account. " . $e->getMessage(). ".\n");
+
+            return $this->errorResponse("Something went wrong. Please try again in a few seconds.");
         }
     }
 
