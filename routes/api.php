@@ -20,6 +20,7 @@ use App\Http\Controllers\PostController;
 Route::post('/register', [AccountController::class, 'register']);
 Route::post('/login', [AccountController::class, 'authenticate']);
 Route::post('/account/update_password', [AccountController::class, 'updatePassword']);
+Route::post('/account/reset_password', [AccountController::class, 'resetPassword']);
 Route::post('/logout', [AccountController::class, 'logout']);
 
 // post
