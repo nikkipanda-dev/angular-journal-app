@@ -155,6 +155,44 @@ class AccountController extends Controller
         }
     }
 
+    public function resetPassword(Request $request) {
+        Log::info("Entering AccountController resetPassword func...");
+
+        $this->validate($request, [
+            'email' => 'bail|required|email|exists:users,email',
+            'password' => 'bail|required|string|min:8|max:16|confirmed',
+            'password_confirmation' => 'required'
+        ]);
+
+        try {
+            $user = User::where('email', $request->email)->first();
+
+            if ($user) {
+                Log::info("User ID ".$user->id." exists. Attempting to reset password...");
+
+                $user->password = Hash::make($request->password);
+
+                $user->save();
+
+                if ($user->wasChanged('password')) {
+                    Log::info("Successfully reset password. Leaving AccountController resetPassword func...");
+                } else {
+                    Log::notice("Password not changed.\n");
+                }
+
+                return $this->successResponse(null, null);
+            } else {
+                Log::error("Failed to reset password. User not found.\n");
+
+                return $this->errorResponse("Failed to reset password. User not found.");
+            }
+        } catch (\Exception $e) {
+            Log::error("Failed to reset password. " . $e->getMessage(). ".\n");
+
+            return $this->errorResponse("Something went wrong. Please try again in a few seconds.");
+        }
+    }
+
     public function logout(Request $request) {
         Log::info("Entering AccountController logout func...");
 
