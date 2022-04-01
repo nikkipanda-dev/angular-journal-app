@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use App\Traits\ResponseTrait;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\ResetPasswordMail;
 use Exception;
 
 class AccountController extends Controller
@@ -226,4 +228,9 @@ class AccountController extends Controller
             return $this->errorResponse("Something went wrong.");
         }
     }
+
+    // public function resetPasswordIndex() {
+    //     Mail::to('codebynikki@gmail.com')->send(new ResetPasswordMail());
+    //     return new ResetPasswordMail();
+    // }
 }
