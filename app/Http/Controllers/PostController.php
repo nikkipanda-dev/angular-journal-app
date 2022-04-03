@@ -351,6 +351,8 @@ class PostController extends Controller
                                 $isValid = true;
                             } else {
                                 Log::notice("Post details were not changed.\n");
+
+                                $errorText = "Post not changed.";
                             }
 
                             return [
