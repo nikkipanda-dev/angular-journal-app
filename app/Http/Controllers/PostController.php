@@ -219,6 +219,7 @@ class PostController extends Controller
             'post_id' => 'bail|required|numeric|exists:posts,id',
             'title' => 'bail|required|string|min:5',
             'body' => 'bail|required|string|min:5',
+            'image' => 'bail|nullable|image',
         ]);
 
         try {
@@ -236,11 +237,115 @@ class PostController extends Controller
                     if (intval($post->user_id) === intval($user->id)) {
                         Log::info("Verified. Attempting to soft delete...");
 
-                        $postResponse = DB::transaction(function () use ($post, $request, $isValid, $errorText) {
+                        $postResponse = DB::transaction(function () use ($post, $user, $request, $isValid, $errorText) {
                             $post->title = $request->title;
                             $post->body = $request->body;
 
                             $post->save();
+
+                            if ($request->hasFile('image')) {
+                                Log::info("Image has file. Checking if valid...");
+
+                                if ($request->image->isValid()) {
+                                    Log::info("Image is valid. Checking if filename is unique...");
+
+                                    $randNum = '';
+
+                                    for ($i = 0; $i < 10; $i++) {
+                                        $randNum .= mt_rand(0, 9);
+                                    }
+
+                                    $filename = $user->id . '-' . $post->id . '-' . $randNum . '.' . $request->image->extension();
+
+                                    if (Storage::disk('public')->missing('posts/' . $filename)) {
+                                        Storage::putFileAs(
+                                            'public/posts',
+                                            $request->image,
+                                            $filename
+                                        );
+
+                                        // Check if image was saved to storage
+                                        if (Storage::disk('public')->exists('posts/' . $filename)) {
+
+                                            $image = Image::where('post_id', $post->id)->first();
+
+                                            // Check if an image already exists
+                                            if ($image) {
+                                                $currentPath = $image->getOriginal('path');
+                                                Log::info("Current path: " . $currentPath);
+
+                                                $image->post_id = $post->id;
+                                                $image->path = 'storage/posts/' . $filename;
+
+                                                $image->save();
+
+                                                if ($image->wasChanged('path')) {
+                                                    $isValid = true;
+                                                    Log::info("Image path successfully saved with ID " . $image->id . ".");
+
+                                                    if ($currentPath) {
+                                                        if (str_starts_with($currentPath, 'storage/posts/')) {
+                                                            $pos = strpos($currentPath, 'storage/posts/');
+                                                            if ($pos !== false) {
+                                                                $newstring = substr_replace($currentPath, '', $pos, strlen('storage/posts/'));
+                                                                $currentPath && Storage::disk('public')->delete('posts/' . $newstring);
+                                                            }
+                                                        } else {
+                                                            $currentPath && Storage::disk('public')->delete('posts/' . $currentPath);
+                                                        }
+                                                    }
+                                                } else {
+                                                    Log::error("Failed to store image path to database. Check logs.");
+
+                                                    $errorText = "Failed to image path to database. Please try again in a few minutes or contact us for assistance.";
+
+                                                    throw new Exception("Failed to store image path to database.\n");
+                                                }
+                                            } else {
+                                                Log::notice("No existing image. Storing new...");
+
+                                                $image = new Image();
+
+                                                $image->post_id = $post->id;
+                                                $image->path = 'storage/posts/' . $filename;
+
+                                                $image->save();
+
+                                                if ($image->id) {
+                                                    $isValid = true;
+                                                    Log::info("Image successfully stored to database.\n");
+                                                } else {
+                                                    Log::error("Failed to store image path to database. Check logs.");
+
+                                                    $errorText = "Failed to image path to database. Please try again in a few minutes or contact us for assistance.";
+
+                                                    throw new Exception("Failed to store image path to database.\n");
+                                                }
+                                            }
+                                        } else {
+                                            Log::error("Generated filename is unique but failed to store image to storage. Check logs.");
+
+                                            $errorText = "Failed to create post. Something went wrong. Please try again in a few seconds.";
+
+                                            throw new Exception("Generated filename is unique but failed to store image to storage.\n");
+                                        }
+                                    } else {
+                                        Log::notice('Filename for image already exists in the storage folder /posts.');
+
+                                        $errorText = "Failed to create post. Please try again in a few minutes or contact us for assistance.";
+
+                                        throw new Exception("Failed to store image to storage. Filename for image already exists in the storage folder /posts.\n");
+                                    }
+                                } else {
+                                    Log::error("Failed to store post. Image is invalid.\n");
+
+                                    $errorText = "Failed to create post. Image is invalid.";
+
+                                    throw new Exception($errorText);
+                                }
+                            } else {
+                                Log::notice("No uploaded file. Skipping...");
+                            }
 
                             if ($post->wasChanged()) {
                                 $isValid = true;
